@@ -17,7 +17,7 @@ MAURI_URL = f"{BASE_URL}/predict-mauri"
 def encode_image(file_path):
     with open(file_path, "rb") as f:
         img_bytes = f.read()
-    return "data:image/png;base64," + base64.b64encode(img_bytes).decode()
+    return "data:image/jpeg;base64," + base64.b64encode(img_bytes).decode()
 
 # ===============================
 # Test YOLO huruf

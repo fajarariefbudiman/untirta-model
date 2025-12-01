@@ -10,7 +10,7 @@ from PIL import Image
 
 app = FastAPI()
 
-# === CORS (WAJIB) ===
+# === CORS ===
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -20,82 +20,61 @@ app.add_middleware(
 )
 
 # ============================================================
-# 1. LOAD YOLO MODEL (HURUF A-Z)
+# LOAD MODEL
 # ============================================================
-model_letter_path = "best.pt"
+def load_model(path, nama):
+    try:
+        model = YOLO(path)
+        model.fuse()
+        print(f"✓ Model {nama} berhasil dimuat: {path}")
+        return model
+    except Exception as e:
+        print(f"✗ Gagal load model {nama}: {e}")
+        return None
 
-try:
-    model_letter = YOLO(model_letter_path)
-    model_letter.fuse()
-    print(f"✓ Model Huruf berhasil dimuat.")
-except Exception as e:
-    print(f"✗ Gagal load model huruf: {e}")
-    model_letter = None
+model_letter = load_model("best.pt", "Huruf")
+model_sentence = load_model("best_sentence.pt", "Kalimat")
+model_mauri = load_model("mauri.pt", "MAURI")
 
-# ============================================================
-# 2. LOAD YOLO MODEL (KALIMAT)
-# ============================================================
-model_sentence_path = "best_sentence.pt"
-
-try:
-    model_sentence = YOLO(model_sentence_path)
-    model_sentence.fuse()
-    print("✓ Model Sentence berhasil dimuat.")
-except Exception as e:
-    print(f"✗ Gagal load model sentence: {e}")
-    model_sentence = None
-
-# ============================================================
-# 3. LOAD YOLO MAURI
-# ============================================================
-mauri_path = "mauri.pt"
-
-try:
-    model_mauri = YOLO(mauri_path)
-    model_mauri.fuse()
-    print("✓ Model MAURI berhasil dimuat.")
-except Exception as e:
-    print(f"✗ Gagal load model MAURI: {e}")
-    model_mauri = None
-
-
-# Label kalimat
 label_map = {0: "saya", 1: "mau", 2: "beli", 3: "terima_kasih", 4: "tolong"}
 
 
-# Base64 Request
 class ImageRequest(BaseModel):
     image: str
 
 
 @app.get("/")
 def home():
+    print("Endpoint / diakses.")
     return {"message": "Server SIBI aktif (Huruf + Kalimat + Mauri)"}
 
 
 # ============================================================
-# 4. ENDPOINT HURUF
+# PREDICT HURUF
 # ============================================================
 @app.post("/predict")
 async def predict_letter(item: ImageRequest):
+    print("\n=== [HIT] /predict (Huruf) ===")
+
     if model_letter is None:
+        print("Model huruf tidak dimuat!")
         return {"error": "Model huruf tidak dimuat"}
 
     try:
+        print("Base64 length:", len(item.image))
+
         image_data = item.image.split(",")[1]
         image_bytes = base64.b64decode(image_data)
 
         pil_image = Image.open(io.BytesIO(image_bytes))
+        print("Gambar diterima:", pil_image.size, pil_image.mode)
+
         img = cv2.cvtColor(np.array(pil_image), cv2.COLOR_RGB2BGR)
         img = cv2.resize(img, (320, 320))
 
-        results = model_letter.predict(
-            img,
-            imgsz=320,
-            conf=0.5,
-            device="cpu",
-            verbose=False
-        )
+        results = model_letter.predict(img, imgsz=320, conf=0.5, device="cpu", verbose=False)
+
+        print("Jumlah box terdeteksi:", len(results[0].boxes))
 
         prediction_text = "-"
 
@@ -105,38 +84,45 @@ async def predict_letter(item: ImageRequest):
             conf = float(box.conf[0])
             cls_name = results[0].names[cls_id]
 
+            print(f"Class: {cls_name}, Confidence: {conf}")
+
             if conf > 0.5:
                 prediction_text = cls_name
 
+        print("Final Prediction:", prediction_text)
         return {"prediction": prediction_text}
 
     except Exception as e:
+        print("ERROR (huruf):", e)
         return {"error": str(e)}
 
 
 # ============================================================
-# 5. ENDPOINT KALIMAT (YOLO)
+# PREDICT KALIMAT
 # ============================================================
 @app.post("/predict-sentence")
 async def predict_sentence(item: ImageRequest):
+    print("\n=== [HIT] /predict-sentence (Kalimat) ===")
+
     if model_sentence is None:
+        print("Model kalimat tidak dimuat!")
         return {"error": "Model kalimat tidak dimuat"}
 
     try:
+        print("Base64 length:", len(item.image))
+
         image_data = item.image.split(",")[1]
         image_bytes = base64.b64decode(image_data)
 
         pil_image = Image.open(io.BytesIO(image_bytes))
+        print("Gambar diterima:", pil_image.size, pil_image.mode)
+
         img = cv2.cvtColor(np.array(pil_image), cv2.COLOR_RGB2BGR)
         img = cv2.resize(img, (320, 320))
 
-        results = model_sentence.predict(
-            img,
-            imgsz=320,
-            conf=0.5,
-            device="cpu",
-            verbose=False
-        )
+        results = model_sentence.predict(img, imgsz=320, conf=0.5, device="cpu", verbose=False)
+
+        print("Jumlah box terdeteksi:", len(results[0].boxes))
 
         prediction = "-"
 
@@ -144,36 +130,42 @@ async def predict_sentence(item: ImageRequest):
             box = results[0].boxes[0]
             cls_id = int(box.cls[0])
             prediction = label_map.get(cls_id, "-")
+            print(f"Class ID: {cls_id}, Sentence: {prediction}")
 
+        print("Final Prediction:", prediction)
         return {"prediction": prediction}
 
     except Exception as e:
+        print("ERROR (kalimat):", e)
         return {"error": str(e)}
 
 
 # ============================================================
-# 6. ENDPOINT MAURI
+# PREDICT MAURI
 # ============================================================
 @app.post("/predict-mauri")
 async def predict_mauri(item: ImageRequest):
+    print("\n=== [HIT] /predict-mauri (MAURI) ===")
+
     if model_mauri is None:
+        print("Model MAURI tidak dimuat!")
         return {"error": "Model MAURI tidak dimuat"}
 
     try:
+        print("Base64 length:", len(item.image))
+
         image_data = item.image.split(",")[1]
         image_bytes = base64.b64decode(image_data)
 
         pil_image = Image.open(io.BytesIO(image_bytes))
+        print("Gambar diterima:", pil_image.size, pil_image.mode)
+
         img = cv2.cvtColor(np.array(pil_image), cv2.COLOR_RGB2BGR)
         img = cv2.resize(img, (320, 320))
 
-        results = model_mauri.predict(
-            img,
-            imgsz=320,
-            conf=0.25,
-            device="cpu",
-            verbose=False
-        )
+        results = model_mauri.predict(img, imgsz=320, conf=0.25, device="cpu", verbose=False)
+
+        print("Jumlah box terdeteksi:", len(results[0].boxes))
 
         detected = []
 
@@ -183,12 +175,16 @@ async def predict_mauri(item: ImageRequest):
                 conf = float(box.conf[0])
                 cls_name = results[0].names[cls_id]
 
+                print(f"- OBJ: {cls_name}, CONF: {conf}")
+
                 detected.append({
                     "object": cls_name,
                     "confidence": round(conf, 3)
                 })
 
+        print("Final Detected:", detected)
         return {"detected_objects": detected}
 
     except Exception as e:
+        print("ERROR (mauri):", e)
         return {"error": str(e)}
