@@ -11,7 +11,7 @@ from tensorflow.keras.models import load_model
 
 app = FastAPI()
 
-# === CORS (WAJIB untuk front-end) ===
+# === CORS ===
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -23,13 +23,13 @@ app.add_middleware(
 # ============================================================
 # 1. LOAD YOLO MODEL (HURUF A-Z)
 # ============================================================
-model_path = "best.pt"
+model_letter_path = "best.pt"
 try:
-    model = YOLO(model_path)
-    print(f"Model YOLO '{model_path}' berhasil dimuat.")
+    model_letter = YOLO(model_letter_path)
+    print(f"[OK] Model huruf '{model_letter_path}' dimuat.")
 except Exception as e:
-    print(f"GAGAL memuat model YOLO: {e}")
-    model = None
+    print(f"[ERROR] Gagal load model huruf: {e}")
+    model_letter = None
 
 # ============================================================
 # 2. LOAD KERAS MODEL (KATA)
@@ -37,43 +37,51 @@ except Exception as e:
 keras_model_path = "my_model.keras"
 try:
     keras_model = load_model(keras_model_path)
-    print(f"Model Keras '{keras_model_path}' berhasil dimuat.")
+    print(f"[OK] Model kata '{keras_model_path}' dimuat.")
 except Exception as e:
-    print(f"GAGAL memuat model Keras: {e}")
+    print(f"[ERROR] Gagal load model Keras: {e}")
     keras_model = None
 
-# Label kata sesuai output model
 label_map = {0: "saya", 1: "mau", 2: "beli", 3: "terima_kasih", 4: "tolong"}
 
+# ============================================================
+# 3. LOAD YOLO MODEL LINGKUNGAN (mauri.pt)
+# ============================================================
+model_mauri_path = "mauri.pt"
+try:
+    model_mauri = YOLO(model_mauri_path)
+    print(f"[OK] Model Mauri '{model_mauri_path}' dimuat.")
+except Exception as e:
+    print(f"[ERROR] Gagal load model Mauri: {e}")
+    model_mauri = None
 
-# Base64 Request Model
+# ============================================================
+# BASE64 Request Format
+# ============================================================
 class ImageRequest(BaseModel):
     image: str
 
 
 @app.get("/")
 def home():
-    return {"message": "Server SIBI Aktif (Huruf + Kata)"}
+    return {"message": "Server SIBI Aktif (Huruf + Kata + Mauri Object Detection)"}
 
 
 # ============================================================
-# 3. ENDPOINT YOLO (HURUF)
+# 4. ENDPOINT YOLO HURUF (best.pt)
 # ============================================================
 @app.post("/predict")
 async def predict_letter(item: ImageRequest):
-    if model is None:
-        return {"error": "Model YOLO tidak berhasil dimuat"}
+    if model_letter is None:
+        return {"error": "Model huruf tidak berhasil dimuat"}
 
     try:
-        # Decode Base64
         image_data = item.image.split(",")[1]
         image_bytes = base64.b64decode(image_data)
-
         pil_image = Image.open(io.BytesIO(image_bytes))
         img = cv2.cvtColor(np.array(pil_image), cv2.COLOR_RGB2BGR)
 
-        # Prediksi YOLO
-        results = model.predict(img)
+        results = model_letter.predict(img)
         prediction_text = "-"
 
         if results and results[0].boxes:
@@ -88,14 +96,13 @@ async def predict_letter(item: ImageRequest):
         return {"prediction": prediction_text}
 
     except Exception as e:
-        print(f"Error prediksi YOLO: {e}")
         return {"error": str(e)}
 
 
 # ============================================================
-# 4. ENDPOINT KERAS (KATA)
+# 5. ENDPOINT KERAS KATA (my_model.keras)
 # ============================================================
-def preprocess_for_keras(pil_image, size=(228, 228)):  
+def preprocess_for_keras(pil_image, size=(228, 228)):
     img = pil_image.resize(size)
     img = np.array(img).astype("float32") / 255.0
     img = np.expand_dims(img, axis=0)
@@ -105,26 +112,55 @@ def preprocess_for_keras(pil_image, size=(228, 228)):
 @app.post("/predict-sentence")
 async def predict_sentence(item: ImageRequest):
     if keras_model is None:
-        return {"error": "Model Keras tidak berhasil dimuat"}
+        return {"error": "Model kata tidak berhasil dimuat"}
 
     try:
-        # Decode Base64
         image_data = item.image.split(",")[1]
         image_bytes = base64.b64decode(image_data)
 
         pil_image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
-
-        # Preprocess
         processed = preprocess_for_keras(pil_image)
 
-        # Prediksi
         predictions = keras_model.predict(processed)
         predicted_index = int(np.argmax(predictions))
-
         predicted_word = label_map.get(predicted_index, "-")
 
         return {"prediction": predicted_word}
 
     except Exception as e:
-        print(f"Error prediksi Keras: {e}")
+        return {"error": str(e)}
+
+
+# ============================================================
+# 6. ENDPOINT OBJECT DETECTION LINGKUNGAN (mauri.pt)
+# ============================================================
+@app.post("/predict-mauri")
+async def predict_mauri(item: ImageRequest):
+    if model_mauri is None:
+        return {"error": "Model Mauri tidak berhasil dimuat"}
+
+    try:
+        image_data = item.image.split(",")[1]
+        image_bytes = base64.b64decode(image_data)
+
+        pil_image = Image.open(io.BytesIO(image_bytes))
+        img = cv2.cvtColor(np.array(pil_image), cv2.COLOR_RGB2BGR)
+
+        results = model_mauri.predict(img)
+
+        objects = []
+        if results and results[0].boxes:
+            for box in results[0].boxes:
+                cls_id = int(box.cls[0])
+                conf = float(box.conf[0])
+                name = results[0].names[cls_id]
+
+                objects.append({
+                    "object": name,
+                    "confidence": round(conf, 3)
+                })
+
+        return {"detected_objects": objects}
+
+    except Exception as e:
         return {"error": str(e)}
