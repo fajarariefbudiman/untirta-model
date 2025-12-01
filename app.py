@@ -21,36 +21,39 @@ app.add_middleware(
 )
 
 # ============================================================
-# 1. LOAD YOLO MODEL (HURUF A-Z)
+# 1. LOAD YOLO MODEL (HURUF A-Z) - OPTIMIZED
 # ============================================================
 model_path = "best.pt"
 try:
     model = YOLO(model_path)
-    print(f"Model YOLO '{model_path}' berhasil dimuat.")
+    model.fuse()  # OPTIMASI: percepat inference
+    print(f"✓ Model YOLO '{model_path}' berhasil dimuat (OPTIMIZED).")
 except Exception as e:
-    print(f"GAGAL memuat model YOLO: {e}")
+    print(f"✗ GAGAL memuat model YOLO: {e}")
     model = None
 
 # ============================================================
-# 2. LOAD KERAS MODEL (KATA)
+# 2. LOAD KERAS MODEL (KATA) - OPTIMIZED
 # ============================================================
 keras_model_path = "my_model.keras"
 try:
     keras_model = load_model(keras_model_path)
-    print(f"Model Keras '{keras_model_path}' berhasil dimuat.")
+    keras_model.compile()  # OPTIMASI: compile ulang untuk inference
+    print(f"✓ Model Keras '{keras_model_path}' berhasil dimuat (OPTIMIZED).")
 except Exception as e:
-    print(f"GAGAL memuat model Keras: {e}")
+    print(f"✗ GAGAL memuat model Keras: {e}")
     keras_model = None
 
 # ============================================================
-# 3. LOAD YOLO MODEL MAURI (OBJECT DETECTION)
+# 3. LOAD YOLO MODEL MAURI (OBJECT DETECTION) - OPTIMIZED
 # ============================================================
 mauri_model_path = "mauri.pt"
 try:
     model_mauri = YOLO(mauri_model_path)
-    print(f"Model YOLO MAURI '{mauri_model_path}' berhasil dimuat.")
+    model_mauri.fuse()  # OPTIMASI: percepat inference
+    print(f"✓ Model YOLO MAURI '{mauri_model_path}' berhasil dimuat (OPTIMIZED).")
 except Exception as e:
-    print(f"GAGAL memuat model MAURI: {e}")
+    print(f"✗ GAGAL memuat model MAURI: {e}")
     model_mauri = None
 
 # Label kata sesuai output model
@@ -62,10 +65,10 @@ class ImageRequest(BaseModel):
 
 @app.get("/")
 def home():
-    return {"message": "Server SIBI Aktif (Huruf + Kata + MAURI)"}
+    return {"message": "Server SIBI Aktif (Huruf + Kata + MAURI) - OPTIMIZED"}
 
 # ============================================================
-# 4. ENDPOINT YOLO (HURUF)
+# 4. ENDPOINT YOLO (HURUF) - OPTIMIZED
 # ============================================================
 @app.post("/predict")
 async def predict_letter(item: ImageRequest):
@@ -79,8 +82,18 @@ async def predict_letter(item: ImageRequest):
         pil_image = Image.open(io.BytesIO(image_bytes))
         img = cv2.cvtColor(np.array(pil_image), cv2.COLOR_RGB2BGR)
         
-        # Prediksi YOLO
-        results = model.predict(img)
+        # OPTIMASI: resize untuk mempercepat
+        img = cv2.resize(img, (320, 320))
+        
+        # Prediksi YOLO dengan parameter optimal
+        results = model.predict(
+            img,
+            imgsz=320,      # ukuran kecil = lebih cepat
+            conf=0.5,
+            device="cpu",
+            verbose=False   # nonaktifkan print
+        )
+        
         prediction_text = "-"
         
         if results and results[0].boxes:
@@ -99,7 +112,7 @@ async def predict_letter(item: ImageRequest):
         return {"error": str(e)}
 
 # ============================================================
-# 5. ENDPOINT KERAS (KATA)
+# 5. ENDPOINT KERAS (KATA) - OPTIMIZED
 # ============================================================
 def preprocess_for_keras(pil_image, size=(228, 228)):  
     img = pil_image.resize(size)
@@ -121,8 +134,8 @@ async def predict_sentence(item: ImageRequest):
         # Preprocess
         processed = preprocess_for_keras(pil_image)
         
-        # Prediksi
-        predictions = keras_model.predict(processed)
+        # Prediksi dengan verbose=0 (nonaktifkan print)
+        predictions = keras_model.predict(processed, verbose=0)
         predicted_index = int(np.argmax(predictions))
         predicted_word = label_map.get(predicted_index, "-")
         
@@ -133,7 +146,7 @@ async def predict_sentence(item: ImageRequest):
         return {"error": str(e)}
 
 # ============================================================
-# 6. ENDPOINT MAURI (OBJECT DETECTION)
+# 6. ENDPOINT MAURI (OBJECT DETECTION) - OPTIMIZED
 # ============================================================
 @app.post("/predict-mauri")
 async def predict_mauri(item: ImageRequest):
@@ -147,8 +160,17 @@ async def predict_mauri(item: ImageRequest):
         pil_image = Image.open(io.BytesIO(image_bytes))
         img = cv2.cvtColor(np.array(pil_image), cv2.COLOR_RGB2BGR)
         
-        # Prediksi MAURI dengan confidence threshold lebih rendah
-        results = model_mauri.predict(img, conf=0.25, verbose=False)
+        # OPTIMASI: resize untuk mempercepat
+        img = cv2.resize(img, (320, 320))
+        
+        # Prediksi MAURI dengan parameter optimal
+        results = model_mauri.predict(
+            img,
+            imgsz=320,      # ukuran kecil = lebih cepat
+            conf=0.25,      # threshold rendah untuk deteksi lebih banyak
+            device="cpu",
+            verbose=False
+        )
         
         detected_objects = []
         
