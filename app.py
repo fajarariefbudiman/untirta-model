@@ -7,11 +7,10 @@ import cv2
 import base64
 import io
 from PIL import Image
-from tensorflow.keras.models import load_model
 
 app = FastAPI()
 
-# === CORS (WAJIB untuk front-end) ===
+# === CORS (WAJIB) ===
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -21,172 +20,175 @@ app.add_middleware(
 )
 
 # ============================================================
-# 1. LOAD YOLO MODEL (HURUF A-Z) - OPTIMIZED
+# 1. LOAD YOLO MODEL (HURUF A-Z)
 # ============================================================
-model_path = "best.pt"
+model_letter_path = "best.pt"
+
 try:
-    model = YOLO(model_path)
-    model.fuse()  # OPTIMASI: percepat inference
-    print(f"✓ Model YOLO '{model_path}' berhasil dimuat (OPTIMIZED).")
+    model_letter = YOLO(model_letter_path)
+    model_letter.fuse()
+    print(f"✓ Model Huruf berhasil dimuat.")
 except Exception as e:
-    print(f"✗ GAGAL memuat model YOLO: {e}")
-    model = None
+    print(f"✗ Gagal load model huruf: {e}")
+    model_letter = None
 
 # ============================================================
-# 2. LOAD KERAS MODEL (KATA) - OPTIMIZED
+# 2. LOAD YOLO MODEL (KALIMAT)
 # ============================================================
-keras_model_path = "my_model.keras"
+model_sentence_path = "best_sentence.pt"
+
 try:
-    keras_model = load_model(keras_model_path)
-    keras_model.compile()  # OPTIMASI: compile ulang untuk inference
-    print(f"✓ Model Keras '{keras_model_path}' berhasil dimuat (OPTIMIZED).")
+    model_sentence = YOLO(model_sentence_path)
+    model_sentence.fuse()
+    print("✓ Model Sentence berhasil dimuat.")
 except Exception as e:
-    print(f"✗ GAGAL memuat model Keras: {e}")
-    keras_model = None
+    print(f"✗ Gagal load model sentence: {e}")
+    model_sentence = None
 
 # ============================================================
-# 3. LOAD YOLO MODEL MAURI (OBJECT DETECTION) - OPTIMIZED
+# 3. LOAD YOLO MAURI
 # ============================================================
-mauri_model_path = "mauri.pt"
+mauri_path = "mauri.pt"
+
 try:
-    model_mauri = YOLO(mauri_model_path)
-    model_mauri.fuse()  # OPTIMASI: percepat inference
-    print(f"✓ Model YOLO MAURI '{mauri_model_path}' berhasil dimuat (OPTIMIZED).")
+    model_mauri = YOLO(mauri_path)
+    model_mauri.fuse()
+    print("✓ Model MAURI berhasil dimuat.")
 except Exception as e:
-    print(f"✗ GAGAL memuat model MAURI: {e}")
+    print(f"✗ Gagal load model MAURI: {e}")
     model_mauri = None
 
-# Label kata sesuai output model
+
+# Label kalimat
 label_map = {0: "saya", 1: "mau", 2: "beli", 3: "terima_kasih", 4: "tolong"}
 
-# Base64 Request Model
+
+# Base64 Request
 class ImageRequest(BaseModel):
     image: str
 
+
 @app.get("/")
 def home():
-    return {"message": "Server SIBI Aktif (Huruf + Kata + MAURI) - OPTIMIZED"}
+    return {"message": "Server SIBI aktif (Huruf + Kalimat + Mauri)"}
+
 
 # ============================================================
-# 4. ENDPOINT YOLO (HURUF) - OPTIMIZED
+# 4. ENDPOINT HURUF
 # ============================================================
 @app.post("/predict")
 async def predict_letter(item: ImageRequest):
-    if model is None:
-        return {"error": "Model YOLO tidak berhasil dimuat"}
-    
+    if model_letter is None:
+        return {"error": "Model huruf tidak dimuat"}
+
     try:
-        # Decode Base64
         image_data = item.image.split(",")[1]
         image_bytes = base64.b64decode(image_data)
+
         pil_image = Image.open(io.BytesIO(image_bytes))
         img = cv2.cvtColor(np.array(pil_image), cv2.COLOR_RGB2BGR)
-        
-        # OPTIMASI: resize untuk mempercepat
         img = cv2.resize(img, (320, 320))
-        
-        # Prediksi YOLO dengan parameter optimal
-        results = model.predict(
+
+        results = model_letter.predict(
             img,
-            imgsz=320,      # ukuran kecil = lebih cepat
+            imgsz=320,
             conf=0.5,
             device="cpu",
-            verbose=False   # nonaktifkan print
+            verbose=False
         )
-        
+
         prediction_text = "-"
-        
+
         if results and results[0].boxes:
-            best_box = results[0].boxes[0]
-            cls_id = int(best_box.cls[0])
-            conf = float(best_box.conf[0])
+            box = results[0].boxes[0]
+            cls_id = int(box.cls[0])
+            conf = float(box.conf[0])
             cls_name = results[0].names[cls_id]
-            
+
             if conf > 0.5:
                 prediction_text = cls_name
-        
+
         return {"prediction": prediction_text}
-    
+
     except Exception as e:
-        print(f"Error prediksi YOLO: {e}")
         return {"error": str(e)}
 
-# ============================================================
-# 5. ENDPOINT KERAS (KATA) - OPTIMIZED
-# ============================================================
-def preprocess_for_keras(pil_image, size=(228, 228)):  
-    img = pil_image.resize(size)
-    img = np.array(img).astype("float32") / 255.0
-    img = np.expand_dims(img, axis=0)
-    return img
 
+# ============================================================
+# 5. ENDPOINT KALIMAT (YOLO)
+# ============================================================
 @app.post("/predict-sentence")
 async def predict_sentence(item: ImageRequest):
-    if keras_model is None:
-        return {"error": "Model Keras tidak berhasil dimuat"}
-    
+    if model_sentence is None:
+        return {"error": "Model kalimat tidak dimuat"}
+
     try:
-        # Decode Base64
         image_data = item.image.split(",")[1]
         image_bytes = base64.b64decode(image_data)
-        pil_image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
-        
-        # Preprocess
-        processed = preprocess_for_keras(pil_image)
-        
-        # Prediksi dengan verbose=0 (nonaktifkan print)
-        predictions = keras_model.predict(processed, verbose=0)
-        predicted_index = int(np.argmax(predictions))
-        predicted_word = label_map.get(predicted_index, "-")
-        
-        return {"prediction": predicted_word}
-    
+
+        pil_image = Image.open(io.BytesIO(image_bytes))
+        img = cv2.cvtColor(np.array(pil_image), cv2.COLOR_RGB2BGR)
+        img = cv2.resize(img, (320, 320))
+
+        results = model_sentence.predict(
+            img,
+            imgsz=320,
+            conf=0.5,
+            device="cpu",
+            verbose=False
+        )
+
+        prediction = "-"
+
+        if results and results[0].boxes:
+            box = results[0].boxes[0]
+            cls_id = int(box.cls[0])
+            prediction = label_map.get(cls_id, "-")
+
+        return {"prediction": prediction}
+
     except Exception as e:
-        print(f"Error prediksi Keras: {e}")
         return {"error": str(e)}
 
+
 # ============================================================
-# 6. ENDPOINT MAURI (OBJECT DETECTION) - OPTIMIZED
+# 6. ENDPOINT MAURI
 # ============================================================
 @app.post("/predict-mauri")
 async def predict_mauri(item: ImageRequest):
     if model_mauri is None:
-        return {"error": "Model MAURI tidak berhasil dimuat"}
-    
+        return {"error": "Model MAURI tidak dimuat"}
+
     try:
-        # Decode Base64
         image_data = item.image.split(",")[1]
         image_bytes = base64.b64decode(image_data)
+
         pil_image = Image.open(io.BytesIO(image_bytes))
         img = cv2.cvtColor(np.array(pil_image), cv2.COLOR_RGB2BGR)
-        
-        # OPTIMASI: resize untuk mempercepat
         img = cv2.resize(img, (320, 320))
-        
-        # Prediksi MAURI dengan parameter optimal
+
         results = model_mauri.predict(
             img,
-            imgsz=320,      # ukuran kecil = lebih cepat
-            conf=0.25,      # threshold rendah untuk deteksi lebih banyak
+            imgsz=320,
+            conf=0.25,
             device="cpu",
             verbose=False
         )
-        
-        detected_objects = []
-        
+
+        detected = []
+
         if results and results[0].boxes:
             for box in results[0].boxes:
                 cls_id = int(box.cls[0])
                 conf = float(box.conf[0])
                 cls_name = results[0].names[cls_id]
-                
-                detected_objects.append({
+
+                detected.append({
                     "object": cls_name,
                     "confidence": round(conf, 3)
                 })
-        
-        return {"detected_objects": detected_objects}
-    
+
+        return {"detected_objects": detected}
+
     except Exception as e:
-        print(f"Error prediksi MAURI: {e}")
         return {"error": str(e)}
