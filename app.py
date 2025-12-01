@@ -19,6 +19,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
 # ============================================================
 # LOAD MODEL
 # ============================================================
@@ -31,6 +32,7 @@ def load_model(path, nama):
     except Exception as e:
         print(f"✗ Gagal load model {nama}: {e}")
         return None
+
 
 model_letter = load_model("best.pt", "Huruf")
 model_sentence = load_model("best_sentence.pt", "Kalimat")
@@ -50,7 +52,7 @@ def home():
 
 
 # ============================================================
-# PREDICT HURUF
+# PREDICT HURUF (INPUT 320×320)
 # ============================================================
 @app.post("/predict")
 async def predict_letter(item: ImageRequest):
@@ -72,7 +74,9 @@ async def predict_letter(item: ImageRequest):
         img = cv2.cvtColor(np.array(pil_image), cv2.COLOR_RGB2BGR)
         img = cv2.resize(img, (320, 320))
 
-        results = model_letter.predict(img, imgsz=320, conf=0.5, device="cpu", verbose=False)
+        results = model_letter.predict(
+            img, imgsz=320, conf=0.5, device="cpu", verbose=False
+        )
 
         print("Jumlah box terdeteksi:", len(results[0].boxes))
 
@@ -98,7 +102,7 @@ async def predict_letter(item: ImageRequest):
 
 
 # ============================================================
-# PREDICT KALIMAT
+# PREDICT KALIMAT (INPUT 640×640)
 # ============================================================
 @app.post("/predict-sentence")
 async def predict_sentence(item: ImageRequest):
@@ -117,10 +121,13 @@ async def predict_sentence(item: ImageRequest):
         pil_image = Image.open(io.BytesIO(image_bytes))
         print("Gambar diterima:", pil_image.size, pil_image.mode)
 
+        # Resize ke 640
         img = cv2.cvtColor(np.array(pil_image), cv2.COLOR_RGB2BGR)
-        img = cv2.resize(img, (320, 320))
+        img = cv2.resize(img, (640, 640))
 
-        results = model_sentence.predict(img, imgsz=320, conf=0.5, device="cpu", verbose=False)
+        results = model_sentence.predict(
+            img, imgsz=640, conf=0.5, device="cpu", verbose=False
+        )
 
         print("Jumlah box terdeteksi:", len(results[0].boxes))
 
@@ -141,7 +148,7 @@ async def predict_sentence(item: ImageRequest):
 
 
 # ============================================================
-# PREDICT MAURI
+# PREDICT MAURI (INPUT 640×640)
 # ============================================================
 @app.post("/predict-mauri")
 async def predict_mauri(item: ImageRequest):
@@ -160,10 +167,13 @@ async def predict_mauri(item: ImageRequest):
         pil_image = Image.open(io.BytesIO(image_bytes))
         print("Gambar diterima:", pil_image.size, pil_image.mode)
 
+        # Resize ke 640
         img = cv2.cvtColor(np.array(pil_image), cv2.COLOR_RGB2BGR)
-        img = cv2.resize(img, (320, 320))
+        img = cv2.resize(img, (640, 640))
 
-        results = model_mauri.predict(img, imgsz=320, conf=0.25, device="cpu", verbose=False)
+        results = model_mauri.predict(
+            img, imgsz=640, conf=0.25, device="cpu", verbose=False
+        )
 
         print("Jumlah box terdeteksi:", len(results[0].boxes))
 
@@ -177,10 +187,7 @@ async def predict_mauri(item: ImageRequest):
 
                 print(f"- OBJ: {cls_name}, CONF: {conf}")
 
-                detected.append({
-                    "object": cls_name,
-                    "confidence": round(conf, 3)
-                })
+                detected.append({"object": cls_name, "confidence": round(conf, 3)})
 
         print("Final Detected:", detected)
         return {"detected_objects": detected}
