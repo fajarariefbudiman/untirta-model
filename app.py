@@ -20,33 +20,28 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ============================================================
-# LOAD YOLO HURUF
-# ============================================================
-letter_model_path = "best.pt"
-try:
-    print("[INFO] Loading YOLO letter model...")
-    letter_model = YOLO(letter_model_path)
-    print(f"[SUCCESS] YOLO Letter Model loaded: {letter_model_path}")
-except Exception as e:
-    print(f"[ERROR] Failed loading YOLO Letter Model: {e}")
-    letter_model = None
 
 # ============================================================
-# LOAD YOLO KATA
+# LOAD YOLO MODELS
 # ============================================================
-sentence_model_path = "best_sentence.pt"
-try:
-    print("[INFO] Loading YOLO sentence model...")
-    sentence_model = YOLO(sentence_model_path)
-    print(f"[SUCCESS] YOLO Sentence Model loaded: {sentence_model_path}")
-except Exception as e:
-    print(f"[ERROR] Failed loading YOLO Sentence Model: {e}")
-    sentence_model = None
+def load_yolo_model(path: str, label: str):
+    try:
+        print(f"[INFO] Loading YOLO {label} model...")
+        model = YOLO(path)
+        print(f"[SUCCESS] YOLO {label} Model loaded: {path}")
+        return model
+    except Exception as e:
+        print(f"[ERROR] Failed loading YOLO {label} Model: {e}")
+        return None
+
+
+letter_model = load_yolo_model("best.pt", "LETTER")
+sentence_model = load_yolo_model("best_sentence.pt", "SENTENCE")
+object_model = load_yolo_model("best_object.pt", "OBJECT")
 
 
 # ============================================================
-# DATA MODEL
+# REQUEST BODY MODEL
 # ============================================================
 class ImageRequest(BaseModel):
     image: str
@@ -55,30 +50,26 @@ class ImageRequest(BaseModel):
 @app.get("/")
 def home():
     print("[DEBUG] Root endpoint accessed")
-    return {"message": "Server SIBI Aktif (Huruf + Kata)"}
+    return {"message": "Server SIBI Aktif (Huruf + Kata + Object)"}
 
 
 # ============================================================
-# HELPER: Decode Base64 → OpenCV Image (with debugging)
+# HELPER: Base64 to OpenCV Image
 # ============================================================
 def decode_base64_image(b64_string):
     try:
         print("[DEBUG] Starting Base64 decode...")
 
         if "," in b64_string:
-            image_data = b64_string.split(",")[1]
-        else:
-            image_data = b64_string
+            b64_string = b64_string.split(",")[1]
 
-        # Decode
-        image_bytes = base64.b64decode(image_data)
+        image_bytes = base64.b64decode(b64_string)
         print(f"[DEBUG] Base64 decoded size: {len(image_bytes)} bytes")
 
         pil_image = Image.open(io.BytesIO(image_bytes))
         img = cv2.cvtColor(np.array(pil_image), cv2.COLOR_RGB2BGR)
 
         print(f"[DEBUG] Image converted to OpenCV format: shape={img.shape}")
-
         return img
 
     except Exception as e:
@@ -87,44 +78,33 @@ def decode_base64_image(b64_string):
 
 
 # ============================================================
-# COMMON YOLO PREDICT FUNCTION (with debugging)
+# YOLO INFERENCE WRAPPER
 # ============================================================
 def run_yolo(model, img, model_name="YOLO"):
     try:
         print(f"[DEBUG] Running prediction on {model_name}...")
 
-        start_time = time.time()
+        start = time.time()
         results = model.predict(img)
-        end_time = time.time()
-
-        print(f"[DEBUG] Prediction time: {end_time - start_time:.4f} seconds")
+        print(f"[DEBUG] Prediction time: {time.time() - start:.4f} seconds")
 
         if not results:
-            print("[WARN] No result returned from YOLO")
             return "-"
 
         result = results[0]
 
         if result.boxes is None or len(result.boxes) == 0:
-            print("[WARN] YOLO detected 0 objects")
+            print("[WARN] No detections found.")
             return "-"
 
-        print(f"[DEBUG] YOLO detected {len(result.boxes)} boxes")
-
-        # Ambil box pertama (paling confident)
-        best_box = result.boxes[0]
-        cls_id = int(best_box.cls[0])
-        conf = float(best_box.conf[0])
+        best = result.boxes[0]
+        cls_id = int(best.cls[0])
+        conf = float(best.conf[0])
         cls_name = result.names[cls_id]
 
-        print(f"[DEBUG] TOP PREDICTION → Class: {cls_name} | ID: {cls_id} | Conf: {conf:.4f}")
+        print(f"[DEBUG] TOP PREDICTION -> {cls_name} ({conf:.4f})")
 
-        if conf > 0.5:
-            print("[DEBUG] Confidence OK, sending result back")
-            return cls_name
-        else:
-            print("[DEBUG] Confidence too low")
-            return "-"
+        return cls_name if conf > 0.5 else "-"
 
     except Exception as e:
         print(f"[ERROR] YOLO prediction error: {e}")
@@ -136,22 +116,17 @@ def run_yolo(model, img, model_name="YOLO"):
 # ============================================================
 @app.post("/predict")
 async def predict_letter(request: ImageRequest):
-    print("\n================= [REQUEST /predict] =================")
+    print("\n===== [REQUEST /predict - LETTER] =====")
     try:
         if letter_model is None:
-            print("[ERROR] Letter model is NOT loaded")
             return {"error": "Model YOLO huruf tidak dimuat"}
 
-        print("[DEBUG] Received image request")
         img = decode_base64_image(request.image)
+        pred = run_yolo(letter_model, img, "YOLO-HURUF")
 
-        prediction = run_yolo(letter_model, img, model_name="YOLO-HURUF")
-
-        print(f"[DONE] Final Letter Prediction: {prediction}")
-        return {"prediction": prediction}
+        return {"prediction": pred}
 
     except Exception as e:
-        print(f"[FATAL ERROR] /predict failed: {e}")
         return {"error": str(e)}
 
 
@@ -160,20 +135,34 @@ async def predict_letter(request: ImageRequest):
 # ============================================================
 @app.post("/predict-sentence")
 async def predict_sentence(request: ImageRequest):
-    print("\n================= [REQUEST /predict-sentence] =================")
+    print("\n===== [REQUEST /predict-sentence] =====")
     try:
         if sentence_model is None:
-            print("[ERROR] Sentence model is NOT loaded")
             return {"error": "Model YOLO kata tidak dimuat"}
 
-        print("[DEBUG] Received image request")
         img = decode_base64_image(request.image)
+        pred = run_yolo(sentence_model, img, "YOLO-KATA")
 
-        prediction = run_yolo(sentence_model, img, model_name="YOLO-KATA")
-
-        print(f"[DONE] Final Sentence Prediction: {prediction}")
-        return {"prediction": prediction}
+        return {"prediction": pred}
 
     except Exception as e:
-        print(f"[FATAL ERROR] /predict-sentence failed: {e}")
+        return {"error": str(e)}
+
+
+# ============================================================
+# ENDPOINT: PREDIKSI OBJEK
+# ============================================================
+@app.post("/predict-object")
+async def predict_object(request: ImageRequest):
+    print("\n===== [REQUEST /predict-object] =====")
+    try:
+        if object_model is None:
+            return {"error": "Model YOLO object tidak dimuat"}
+
+        img = decode_base64_image(request.image)
+        pred = run_yolo(object_model, img, "YOLO-OBJECT")
+
+        return {"prediction": pred}
+
+    except Exception as e:
         return {"error": str(e)}
