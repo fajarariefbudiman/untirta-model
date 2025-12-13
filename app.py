@@ -36,6 +36,7 @@ def load_yolo_model(path: str, label: str):
 
 
 letter_model = load_yolo_model("best.pt", "LETTER")
+braille_model = load_yolo_model("best_braille.pt", "BRAILLE")
 sentence_model = load_yolo_model("best_sentence.pt", "SENTENCE")
 object_model = load_yolo_model("best_object.pt", "OBJECT")
 
@@ -117,6 +118,24 @@ def run_yolo(model, img, model_name="YOLO"):
 @app.post("/predict")
 async def predict_letter(request: ImageRequest):
     print("\n===== [REQUEST /predict - LETTER] =====")
+    try:
+        if letter_model is None:
+            return {"error": "Model YOLO huruf tidak dimuat"}
+
+        img = decode_base64_image(request.image)
+        pred = run_yolo(letter_model, img, "YOLO-HURUF")
+
+        return {"prediction": pred}
+
+    except Exception as e:
+        return {"error": str(e)}
+    
+# ============================================================
+# ENDPOINT: PREDIKSI HURUF
+# ============================================================
+@app.post("/braille")
+async def braille_letter(request: ImageRequest):
+    print("\n===== [REQUEST /braille - BRAILLE] =====")
     try:
         if letter_model is None:
             return {"error": "Model YOLO huruf tidak dimuat"}
