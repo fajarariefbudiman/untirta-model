@@ -8,8 +8,9 @@ import os
 # ===============================
 BASE_URL = "http://103.49.239.237:8000"
 YOLO_URL = f"{BASE_URL}/predict"
+BRAILLE_URL = f"{BASE_URL}/braille"
 KERAS_URL = f"{BASE_URL}/predict-sentence"
-MAURI_URL = f"{BASE_URL}/predict-mauri"
+MAURI_URL = f"{BASE_URL}/predict-object"
 
 # ===============================
 # Fungsi untuk encode gambar
@@ -29,6 +30,17 @@ def test_yolo(image_path):
         print(f"[YOLO] {image_path} -> {resp.json()}")
     except Exception as e:
         print(f"[YOLO ERROR] {image_path} -> {e}")
+        
+# ===============================
+# Test BRAILLE huruf
+# ===============================
+def test_braille(image_path):
+    payload = {"image": encode_image(image_path)}
+    try:
+        resp = requests.post(BRAILLE_URL, json=payload, timeout=10)
+        print(f"[BRAILLE] {image_path} -> {resp.json()}")
+    except Exception as e:
+        print(f"[BRAILLE ERROR] {image_path} -> {e}")
 
 # ===============================
 # Test Keras kalimat
@@ -65,6 +77,7 @@ if __name__ == "__main__":
             print(f"File tidak ditemukan: {img_path}")
             continue
 
+        test_braille(img_path)
         test_yolo(img_path)
         test_keras(img_path)
         test_mauri(img_path)

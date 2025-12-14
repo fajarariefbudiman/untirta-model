@@ -137,11 +137,11 @@ async def predict_letter(request: ImageRequest):
 async def braille_letter(request: ImageRequest):
     print("\n===== [REQUEST /braille - BRAILLE] =====")
     try:
-        if letter_model is None:
+        if braille_model is None:
             return {"error": "Model YOLO huruf tidak dimuat"}
 
         img = decode_base64_image(request.image)
-        pred = run_yolo(letter_model, img, "YOLO-HURUF")
+        pred = run_yolo(braille_model, img, "YOLO-HURUF")
 
         return {"prediction": pred}
 
